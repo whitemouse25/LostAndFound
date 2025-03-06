@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "seed:admin": "node scripts/seedAdmin.js"
   },
   "author": "Sandesh Gorathoki",
   "license": "ISC",

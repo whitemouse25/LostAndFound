@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import Navbar from "../components/Navbar";
-import RedAccentBar from "../components/RedAccentBar";
 
 const Claim = () => {
   const [formData, setFormData] = useState({
@@ -10,7 +9,6 @@ const Claim = () => {
     verificationCode: "",
   });
   const [showQR, setShowQR] = useState(false);
-
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prevState) => ({
@@ -41,7 +39,7 @@ const Claim = () => {
           {/*Claim box container*/}
           <div className="w-full max-w-7xl mx-auto px-8 relative">
             {/*Red Accent Bar*/}
-            <div className="absolute right-6.5 top-0 bottom-0 w-[30px] bg-[#e2231a]"></div>
+            <div className="absolute right-6.5 top-0 bottom-12 w-[30px] bg-[#e2231a]"></div>
             <div className="relative right-0 top-0 left-223 h-[30px] w-[300px] bg-[#e2231a]"></div>
 
             {/* Form Section */}

@@ -1,8 +1,6 @@
-import React from "react";
-import { useState } from "react";
+import React, { useState } from "react";
 import Navbar from "../components/Navbar";
 import buildingImage from "../assets/building.png";
-import RedAccentBar from "../components/RedAccentBar";
 
 const Report = () => {
   const [formData, setFormData] = useState({
@@ -65,7 +63,8 @@ const Report = () => {
       <div className="max-w-7xl mx-auto w-full mt-10 px-6 pb-12">
         <div className="relative">
           {/* Red accent bar */}
-          <RedAccentBar />
+          <div className="absolute right-0 top-0 bottom-0 w-[30px] bg-[#e2231a]"></div>
+          <div className="relative right-0 top-0 left-227 h-[30px] w-[300px] bg-[#e2231a]"></div>
           {/* Form */}
           <div className="bg-black text-white p-8 pr-16">
             <form onSubmit={handleSubmit} className="space-y-6">

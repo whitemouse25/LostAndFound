@@ -1,6 +1,5 @@
-import React from "react";
 import Navbar from "../components/Navbar";
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -9,16 +8,38 @@ const Admin = () => {
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  // Fixed admin credentials (in a real app, you'd verify against your database)
+  const ADMIN_EMAIL = "admin@fanshawe.ca";
+  const ADMIN_PASSWORD = "admin123";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
+
     try {
+      // Simulate API delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      navigate("/admin/dashboard");
+
+      // Check against fixed credentials
+      if (
+        credentials.email === ADMIN_EMAIL &&
+        credentials.password === ADMIN_PASSWORD
+      ) {
+        // Store authentication state in localStorage
+        localStorage.setItem("isAdminLoggedIn", "true");
+
+        // Redirect to admin dashboard
+        navigate("/admin/dashboard");
+      } else {
+        throw new Error("Invalid email or password");
+      }
     } catch (error) {
       console.error("Login failed:", error);
+      setError(error.message || "Login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +71,12 @@ const Admin = () => {
               </h2>
 
               <div className="max-w-xl mx-auto">
+                {error && (
+                  <div className="bg-red-600 text-white p-3 rounded mb-4">
+                    {error}
+                  </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-8 ml-21 py-10">
                   <div className="space-y-4">
                     <div>
