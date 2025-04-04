@@ -1,0 +1,10 @@
+Item Information
+------------------------
+Item ID: 67dca3771be0f758c559dcec
+Title: Mobile Phone
+Category: Electronics
+Description: sadwdsasd
+Location: Fanshawe Student Center
+Date: 2025-03-19
+Status: lost
+------------------------
