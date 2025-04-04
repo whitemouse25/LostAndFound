@@ -163,8 +163,8 @@ exports.verifyClaim = async (req, res) => {
             });
         }
 
-        // Check if item is already claimed
-        if (item.status === 'claimed') {
+        // Check if item is already claimed or has a pending claim
+        if (item.status === 'approved' || item.status === 'pending') {
             return res.status(400).json({ 
                 success: false,
                 message: 'Item already claimed',
@@ -173,19 +173,19 @@ exports.verifyClaim = async (req, res) => {
         }
 
         // Update item with claim details
-        item.status = 'claimed';
+        item.status = 'pending';
         item.claimedBy = {
             firstName,
             lastName,
             email,
-            phone,
+            phoneNumber: phone,
             claimedAt: new Date()
         };
         await item.save();
 
         res.json({
             success: true,
-            message: 'Item claimed successfully',
+            message: 'Item claim submitted successfully',
             data: {
                 itemId: item._id,
                 title: item.title,
@@ -198,7 +198,7 @@ exports.verifyClaim = async (req, res) => {
         res.status(500).json({ 
             success: false,
             message: 'Error verifying claim',
-            details: error.message
+            error: error.message
         });
     }
 };
@@ -206,26 +206,45 @@ exports.verifyClaim = async (req, res) => {
 // Get all claim requests
 exports.getClaimRequests = async (req, res) => {
     try {
-        // Find all items that have been claimed
-        const claims = await Item.find({ 
-            status: 'claimed',
-            'claimedBy': { $exists: true }
+        console.log('Fetching claim requests...');
+        
+        // Find all items with claim-related statuses and claimedBy information
+        const claims = await Item.find({
+            $or: [
+                { status: 'pending' },
+                { status: 'claimed' },
+                { status: 'rejected' }
+            ],
+            'claimedBy.email': { $exists: true }
         }).sort({ 'claimedBy.claimedAt': -1 });
+
+        console.log(`Found ${claims.length} claim requests`);
+        
+        // Log each claim for debugging
+        claims.forEach(claim => {
+            console.log('Claim:', {
+                id: claim._id,
+                title: claim.title,
+                status: claim.status,
+                claimant: claim.claimedBy ? {
+                    name: `${claim.claimedBy.firstName} ${claim.claimedBy.lastName}`,
+                    email: claim.claimedBy.email
+                } : 'No claimant info'
+            });
+        });
 
         res.json({
             success: true,
             claims: claims.map(claim => ({
                 _id: claim._id,
-                item: {
-                    title: claim.title,
-                    category: claim.category,
-                    location: claim.location,
-                    description: claim.description,
-                    images: claim.images
-                },
-                claimedBy: claim.claimedBy,
+                title: claim.title,
+                description: claim.description,
+                category: claim.category,
+                location: claim.location,
                 status: claim.status,
-                createdAt: claim.createdAt
+                claimedBy: claim.claimedBy,
+                createdAt: claim.createdAt,
+                updatedAt: claim.updatedAt
             }))
         });
     } catch (error) {
@@ -233,7 +252,178 @@ exports.getClaimRequests = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching claim requests',
-            details: error.message
+            error: error.message
+        });
+    }
+};
+
+// Approve a claim request
+exports.approveClaim = async (req, res) => {
+    try {
+        const { claimId } = req.params;
+        console.log('Approving claim with ID:', claimId);
+        
+        const item = await Item.findById(claimId);
+        if (!item) {
+            console.log('Item not found with ID:', claimId);
+            return res.status(404).json({
+                success: false,
+                message: 'Claim request not found'
+            });
+        }
+
+        console.log('Found item:', {
+            id: item._id,
+            title: item.title,
+            status: item.status
+        });
+
+        if (item.status !== 'pending') {
+            console.log('Invalid status for approval:', item.status);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid claim status',
+                details: 'This claim has already been processed'
+            });
+        }
+
+        // Update item status to claimed
+        console.log('Updating status from', item.status, 'to claimed');
+        item.status = 'claimed';
+        await item.save();
+        console.log('Item saved successfully');
+
+        // Send email notification to claimant
+        if (item.claimedBy && item.claimedBy.email) {
+            console.log('Sending email to:', item.claimedBy.email);
+            try {
+                const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #333;">Claim Request Approved</h2>
+                        <p>Hello ${item.claimedBy.firstName},</p>
+                        <p>Your claim request for the following item has been approved:</p>
+                        <ul>
+                            <li><strong>Item:</strong> ${item.title}</li>
+                            <li><strong>Category:</strong> ${item.category}</li>
+                            <li><strong>Location:</strong> ${item.location}</li>
+                        </ul>
+                        <p>Please visit the Lost and Found office to collect your item.</p>
+                        <p>Bring a valid ID for verification.</p>
+                        <hr>
+                        <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply.</p>
+                    </div>
+                `;
+
+                await sendEmail({
+                    to: item.claimedBy.email,
+                    subject: 'Claim Request Approved',
+                    html: emailHtml
+                });
+                console.log('Email sent successfully');
+            } catch (emailError) {
+                console.error('Error sending email:', emailError);
+                // Continue with the response even if email fails
+            }
+        } else {
+            console.log('No email sent - missing claimant information');
+        }
+
+        res.json({
+            success: true,
+            message: 'Claim request approved successfully'
+        });
+    } catch (error) {
+        console.error('Error approving claim:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Error approving claim',
+            error: error.message
+        });
+    }
+};
+
+// Reject a claim request
+exports.rejectClaim = async (req, res) => {
+    try {
+        const { claimId } = req.params;
+        console.log('Rejecting claim with ID:', claimId);
+        
+        const item = await Item.findById(claimId);
+        if (!item) {
+            console.log('Item not found with ID:', claimId);
+            return res.status(404).json({
+                success: false,
+                message: 'Claim request not found'
+            });
+        }
+
+        console.log('Found item:', {
+            id: item._id,
+            title: item.title,
+            status: item.status
+        });
+
+        if (item.status !== 'pending') {
+            console.log('Invalid status for rejection:', item.status);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid claim status',
+                details: 'This claim has already been processed'
+            });
+        }
+
+        // Update item status to rejected
+        console.log('Updating status from', item.status, 'to rejected');
+        item.status = 'rejected';
+        await item.save();
+        console.log('Item saved successfully');
+
+        // Send email notification to claimant
+        if (item.claimedBy && item.claimedBy.email) {
+            console.log('Sending email to:', item.claimedBy.email);
+            try {
+                const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #333;">Claim Request Rejected</h2>
+                        <p>Hello ${item.claimedBy.firstName},</p>
+                        <p>Your claim request for the following item has been rejected:</p>
+                        <ul>
+                            <li><strong>Item:</strong> ${item.title}</li>
+                            <li><strong>Category:</strong> ${item.category}</li>
+                            <li><strong>Location:</strong> ${item.location}</li>
+                        </ul>
+                        <p>If you believe this is an error, please contact the Lost and Found office.</p>
+                        <hr>
+                        <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply.</p>
+                    </div>
+                `;
+
+                await sendEmail({
+                    to: item.claimedBy.email,
+                    subject: 'Claim Request Rejected',
+                    html: emailHtml
+                });
+                console.log('Email sent successfully');
+            } catch (emailError) {
+                console.error('Error sending email:', emailError);
+                // Continue with the response even if email fails
+            }
+        } else {
+            console.log('No email sent - missing claimant information');
+        }
+
+        res.json({
+            success: true,
+            message: 'Claim request rejected successfully'
+        });
+    } catch (error) {
+        console.error('Error rejecting claim:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Error rejecting claim',
+            error: error.message
         });
     }
 }; 

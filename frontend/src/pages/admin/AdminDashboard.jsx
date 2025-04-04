@@ -289,9 +289,9 @@ const AdminDashboard = () => {
               <div className="flex space-x-4">
                 <button
                   onClick={() => navigate('/admin/claims')}
-                  className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                 >
-                  View Claim Requests
+                  Claim Requests
                 </button>
                 <button
                   onClick={() => setShowAddModal(true)}

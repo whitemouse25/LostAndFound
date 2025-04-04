@@ -143,8 +143,8 @@ exports.claimItem = async (req, res) => {
             });
         }
 
-        // Check if item is already claimed
-        if (item.status === 'claimed') {
+        // Check if item is already claimed or pending
+        if (item.status === 'claimed' || item.status === 'pending') {
             return res.status(400).json({
                 success: false,
                 message: 'Item already claimed',
@@ -152,8 +152,8 @@ exports.claimItem = async (req, res) => {
             });
         }
 
-        // Update item with claim details
-        item.status = 'claimed';
+        // Update item with claim details and set status to pending
+        item.status = 'pending';
         item.claimedBy = {
             firstName,
             lastName,
@@ -167,7 +167,7 @@ exports.claimItem = async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Item claimed successfully',
+            message: 'Claim request submitted successfully',
             data: {
                 itemId: item._id,
                 title: item.title,

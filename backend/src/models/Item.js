@@ -19,7 +19,7 @@ const itemSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ['lost', 'found', 'claimed'],
+    enum: ['lost', 'found', 'pending', 'claimed', 'rejected'],
     default: 'found'
   },
   location: {
