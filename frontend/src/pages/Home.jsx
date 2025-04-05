@@ -1,10 +1,20 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import fanshaweLogoSrc from "../assets/fanshawe-logo.png";
 import fanshawehero from "../assets/hero.png"; // Make sure to add this logo to your assets folder
 import Navbar from "../components/Navbar";
 
 function Home() {
+  const navigate = useNavigate();
+
+  const handleReclaimClick = () => {
+    navigate('/claim');
+  };
+
+  const handleReportClick = () => {
+    navigate('/report');
+  };
+
   return (
     <>
       <Navbar />
@@ -27,7 +37,9 @@ function Home() {
                   "Lost it? Find it here! Your Campus Connection for reclaimed
                   tresures"
                 </h1>
-                <button className="mt-8 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 cursor-pointer rounded-md transition">
+                <button 
+                  onClick={handleReclaimClick}
+                  className="mt-8 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 cursor-pointer rounded-md transition">
                   Reclaim now
                 </button>
               </div>
@@ -43,7 +55,9 @@ function Home() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
                 {/* Step 1 */}
-                <div className="bg-red-600 text-white rounded-lg overflow-hidden">
+                <div 
+                  onClick={handleReportClick}
+                  className="bg-red-600 text-white rounded-lg overflow-hidden cursor-pointer hover:bg-red-700 transition">
                   <div className="p-6 text-center">
                     <h3 className="text-2xl font-bold mb-4">REPORT</h3>
                     <div className="text-8xl font-bold mb-4">1</div>
@@ -61,7 +75,9 @@ function Home() {
                 </div>
 
                 {/* Step 3 */}
-                <div className="bg-red-600 text-white rounded-lg overflow-hidden">
+                <div 
+                  onClick={handleReclaimClick}
+                  className="bg-red-600 text-white rounded-lg overflow-hidden cursor-pointer hover:bg-red-700 transition">
                   <div className="p-6 text-center">
                     <h3 className="text-2xl font-bold mb-4">CLAIM</h3>
                     <div className="text-8xl font-bold mb-4">3</div>
@@ -71,7 +87,9 @@ function Home() {
               </div>
 
               <div className="text-center mt-10">
-                <button className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-12 cursor-pointer rounded-md transition">
+                <button 
+                  onClick={handleReclaimClick}
+                  className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-12 cursor-pointer rounded-md transition">
                   Reclaim now
                 </button>
               </div>

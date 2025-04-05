@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from 'react-toastify';
 import Navbar from "../components/Navbar";
 import buildingImage from "../assets/building.png";
 import { createPublicReport } from "../services/itemService";
@@ -8,6 +9,7 @@ const Report = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [imagePreview, setImagePreview] = useState([]);
   const [formData, setFormData] = useState({
     title: "",
     category: "Electronics",
@@ -25,15 +27,20 @@ const Report = () => {
   const handleInputChange = (e) => {
     const { name, value, type, files } = e.target;
     if (type === "file") {
+      const selectedFiles = Array.from(files);
       setFormData((prev) => ({
         ...prev,
-        images: Array.from(files),
+        images: selectedFiles,
       }));
+
+      // Create preview URLs for the selected images
+      const previews = selectedFiles.map(file => URL.createObjectURL(file));
+      setImagePreview(previews);
     } else {
-    setFormData((prev) => ({
-      ...prev,
+      setFormData((prev) => ({
+        ...prev,
         [name]: value,
-    }));
+      }));
     }
   };
 
@@ -69,15 +76,37 @@ const Report = () => {
       };
 
       await createPublicReport(submitData);
-      alert("Report submitted successfully!");
+      toast.success('Report submitted successfully!', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
       navigate("/");
     } catch (err) {
       console.error('Submit error:', err);
       setError(err.message || "Error submitting report");
+      toast.error(err.message || "Error submitting report", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  // Clean up preview URLs when component unmounts
+  React.useEffect(() => {
+    return () => {
+      imagePreview.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [imagePreview]);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#fafafa]">
@@ -134,7 +163,7 @@ const Report = () => {
                   value={formData.title}
                   onChange={handleInputChange}
                   className="w-full bg-white rounded border border-white text-black px-3 py-2"
-                  placeholder="Enter item name"
+                  placeholder="e.g., iPhone 13, Black Backpack, Student ID Card"
                   required
                 />
               </div>
@@ -157,87 +186,17 @@ const Report = () => {
               </div>
 
               <div>
-                <label className="block mb-2">Name</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <input
-                      type="text"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleInputChange}
-                      className="w-full bg-white rounded border border-white text-black px-3 py-2"
-                      placeholder="First name"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleInputChange}
-                      className="w-full bg-white rounded border border-white text-black px-3 py-2"
-                      placeholder="Last name"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-2">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="w-full bg-white rounded border border-white text-black px-3 py-2"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block mb-2">Phone Number</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  className="w-full bg-white rounded border border-white text-black px-3 py-2"
-                  required
-                />
-              </div>
-
-              <div>
                 <label className="block mb-2">Status</label>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="lost"
-                      name="status"
-                      value="lost"
-                      checked={formData.status === "lost"}
-                      onChange={handleInputChange}
-                      className="border-white"
-                      required
-                    />
-                    <label htmlFor="lost">Lost item</label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="found"
-                      name="status"
-                      value="found"
-                      checked={formData.status === "found"}
-                      onChange={handleInputChange}
-                      className="border-white"
-                      required
-                    />
-                    <label htmlFor="found">Found item</label>
-                  </div>
-                </div>
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleInputChange}
+                  className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                  required
+                >
+                  <option value="lost">Lost</option>
+                  <option value="found">Found</option>
+                </select>
               </div>
 
               <div>
@@ -248,6 +207,7 @@ const Report = () => {
                   value={formData.location}
                   onChange={handleInputChange}
                   className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                  placeholder="e.g., Room 101, Library, Student Center, Parking Lot A"
                   required
                 />
               </div>
@@ -265,41 +225,128 @@ const Report = () => {
               </div>
 
               <div>
-                <label className="block mb-2">
-                  Detailed Information
-                </label>
-                <textarea
-                  name="detailedInfo"
-                  value={formData.detailedInfo}
+                <label className="block mb-2">Name</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <input
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                      placeholder="Enter your first name"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleInputChange}
+                      className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                      placeholder="Enter your last name"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-2">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full bg-white rounded border border-white text-black px-3 py-2 h-32"
+                  className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                  placeholder="example@fanshawe.ca"
                   required
                 />
               </div>
 
               <div>
-                <label className="block mb-2">
-                  Upload Images (Optional)
-                </label>
-                <div className="border-2 border-dashed bg-white border-white rounded-md p-6 text-center cursor-pointer">
-                  <input
-                    type="file"
-                    name="images"
-                    onChange={handleInputChange}
-                    multiple
-                    accept="image/*"
-                    className="w-full"
-                  />
-                </div>
+                <label className="block mb-2">Phone Number</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                  placeholder="+1 (123) 456-7890"
+                  required
+                />
               </div>
 
+              <div>
+                <label className="block mb-2">Detailed Information</label>
+                <textarea
+                  name="detailedInfo"
+                  value={formData.detailedInfo}
+                  onChange={handleInputChange}
+                  className="w-full bg-white rounded border border-white text-black px-3 py-2 h-32"
+                  placeholder="Describe your item in detail (color, size, brand, distinguishing features, etc.)"
+                  required
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block mb-2">Images (Optional)</label>
+                <input
+                  type="file"
+                  name="images"
+                  onChange={handleInputChange}
+                  className="w-full bg-white rounded border border-white text-black px-3 py-2"
+                  accept="image/*"
+                  multiple
+                />
+                <p className="text-sm text-gray-400 mt-1">
+                  You can upload up to 5 images (JPEG, PNG, GIF). Maximum size: 10MB each.
+                </p>
+              </div>
+
+              {/* Image Preview Section */}
+              {imagePreview.length > 0 && (
+                <div className="mt-4">
+                  <label className="block mb-2">Image Previews</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {imagePreview.map((preview, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-32 object-cover rounded"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImagePreview(prev => prev.filter((_, i) => i !== index));
+                            setFormData(prev => ({
+                              ...prev,
+                              images: Array.from(prev.images).filter((_, i) => i !== index)
+                            }));
+                          }}
+                          className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-700"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4">
                 <button
                   type="submit"
-                disabled={loading}
-                className="w-full bg-[#e2231a] text-white py-3 px-6 rounded text-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+                  disabled={loading}
+                  className={`w-full bg-red-600 text-white py-3 rounded font-bold ${
+                    loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'
+                  }`}
                 >
-                {loading ? "Submitting..." : "Submit Report"}
+                  {loading ? 'Submitting...' : 'Submit Report'}
                 </button>
+              </div>
             </form>
           </div>
         </div>

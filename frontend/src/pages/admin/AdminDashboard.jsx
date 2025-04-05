@@ -40,6 +40,7 @@ const AdminDashboard = () => {
   const [sortOrder, setSortOrder] = useState("desc");
   const [verificationEmail, setVerificationEmail] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -67,43 +68,77 @@ const AdminDashboard = () => {
       setIsLoading(true);
       const items = await getAllItems(true);
       console.log('Fetched items:', items);
-      setInventoryItems(items);
-
-      // Calculate stats
+      
+      // Process and fix image URLs for all items
+      const processedItems = items.map(item => {
+        // Fix image URLs
+        let fixedImages = [];
+        if (item.images && item.images.length > 0) {
+          fixedImages = item.images.map(image => {
+            if (image.startsWith('http')) {
+              return image;
+            } else {
+              // If not a full URL, it might be a relative path
+              return `${process.env.REACT_APP_API_URL}/${image}`;
+            }
+          });
+        }
+        
+        // Ensure all required fields are present
+        return {
+          ...item,
+          images: fixedImages,
+          title: item.title || 'Untitled Item',
+          description: item.description || 'No description provided',
+          category: item.category || 'Uncategorized',
+          status: item.status || 'unknown',
+          location: item.location || 'Location not specified',
+          date: item.date || item.createdAt || new Date().toISOString(),
+          createdAt: item.createdAt || new Date().toISOString(),
+          updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+          reporter: item.reporter || {
+            firstName: 'N/A',
+            lastName: '',
+            email: 'N/A',
+            phone: 'N/A'
+          }
+        };
+      });
+      
+      console.log('Processed items:', processedItems);
+      setInventoryItems(processedItems);
+      
+      // Calculate statistics
       const stats = {
-        total: items.length,
-        lost: items.filter(item => item.status === 'lost').length,
-        found: items.filter(item => item.status === 'found').length,
-        claimed: items.filter(item => item.status === 'claimed').length,
-        returned: items.filter(item => item.status === 'returned').length
+        total: processedItems.length,
+        lost: processedItems.filter(item => item.status === 'lost').length,
+        found: processedItems.filter(item => item.status === 'found').length,
+        claimed: processedItems.filter(item => item.status === 'claimed').length,
+        returned: processedItems.filter(item => item.status === 'returned').length
       };
+      
       setStats(stats);
     } catch (error) {
       console.error('Error fetching items:', error);
-      if (error.response?.status === 401) {
-        // Only redirect to login if we get a 401 error
-        navigate('/admin/login');
-        return;
-      }
-      setInventoryItems([]);
-      setStats({
-        total: 0,
-        lost: 0,
-        found: 0,
-        claimed: 0,
-        returned: 0
-      });
-      alert('Failed to fetch items. Please try again.');
+      toast.error('Failed to fetch items. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("adminUser");
+    // Clear admin credentials from localStorage
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+    
+    // Remove the Authorization header from API requests
     delete api.defaults.headers.common['Authorization'];
-    navigate("/admin/login");
+    
+    // Show success message
+    toast.success('Logged out successfully');
+    
+    // Redirect to login page
+    navigate('/admin/login');
   };
 
   const handleStatusChange = async (itemId, newStatus) => {
@@ -118,9 +153,10 @@ const AdminDashboard = () => {
       
       // Refresh the items list after update
       await fetchItems();
+      toast.success('Status updated successfully');
     } catch (error) {
       console.error('Error updating status:', error);
-      alert(error.message || 'Failed to update status');
+      toast.error(error.message || 'Failed to update status');
     }
   };
 
@@ -132,9 +168,10 @@ const AdminDashboard = () => {
         await Promise.all(selectedItems.map(id => deleteItem(id)));
         setSelectedItems([]);
         await fetchItems(); // Refresh data after deletion
+        toast.success('Items deleted successfully');
       } catch (error) {
         console.error('Error deleting items:', error);
-        alert('Failed to delete items');
+        toast.error('Failed to delete items');
       }
     }
   };
@@ -156,34 +193,45 @@ const AdminDashboard = () => {
 
   const handleAddItem = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const adminToken = localStorage.getItem('adminToken');
-      
-      if (!adminToken) {
-        throw new Error('Please log in as an admin');
-      }
-
       const formData = new FormData();
+      
+      // Add basic item information
       formData.append('title', newItem.item);
       formData.append('description', newItem.details);
       formData.append('category', newItem.category);
-      formData.append('status', newItem.status.toLowerCase());
+      formData.append('status', newItem.status);
       formData.append('location', newItem.location);
       formData.append('date', newItem.date);
-      formData.append('contactInfo', JSON.stringify({
+
+      // Add reporter information
+      formData.append('firstName', newItem.firstName);
+      formData.append('lastName', newItem.lastName);
+      formData.append('email', newItem.email);
+      formData.append('phone', newItem.phone);
+
+      // Append images if they exist
+      if (newItem.images && newItem.images.length > 0) {
+        newItem.images.forEach((image) => {
+          formData.append('images', image);
+        });
+      }
+
+      console.log('Creating new item with data:', {
+        title: newItem.item,
+        description: newItem.details,
+        category: newItem.category,
+        status: newItem.status,
+        location: newItem.location,
+        date: newItem.date,
         firstName: newItem.firstName,
         lastName: newItem.lastName,
         email: newItem.email,
-        phone: newItem.phone
-      }));
-
-      // Append images
-      newItem.images.forEach((image, index) => {
-        formData.append('images', image);
+        phone: newItem.phone,
+        images: newItem.images
       });
 
-      console.log('Creating new item with data:', Object.fromEntries(formData));
       await createItem(formData);
       
       // Reset form and close modal
@@ -201,14 +249,11 @@ const AdminDashboard = () => {
         images: []
       });
       setShowAddModal(false);
-      
-      // Refresh the items list
       await fetchItems();
-      
-      alert('Item added successfully');
+      toast.success('Item added successfully');
     } catch (error) {
       console.error('Error adding item:', error);
-      alert(error.message || 'Failed to add item');
+      toast.error(error.message || 'Failed to add item');
     } finally {
       setIsLoading(false);
     }
@@ -223,191 +268,182 @@ const AdminDashboard = () => {
   };
 
   const handleViewDetails = (item) => {
-    setSelectedItem(item);
+    console.log('Viewing item details:', item);
+    console.log('Item images:', item.images);
+    
+    // Check and fix image URLs
+    if (item.images && item.images.length > 0) {
+      const fixedImages = item.images.map(image => {
+        if (image.startsWith('http')) {
+          return image;
+        } else {
+          // If not a full URL, it might be a relative path
+          return `${process.env.REACT_APP_API_URL}/${image}`;
+        }
+      });
+      
+      console.log('Fixed images for view details:', fixedImages);
+      setSelectedItem({ ...item, images: fixedImages });
+    } else {
+      setSelectedItem(item);
+    }
+    
+    // Ensure all required fields are present
+    const processedItem = {
+      ...item,
+      title: item.title || 'Untitled Item',
+      description: item.description || 'No description provided',
+      category: item.category || 'Uncategorized',
+      status: item.status || 'unknown',
+      location: item.location || 'Location not specified',
+      date: item.date || item.createdAt || new Date().toISOString(),
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+      reporter: item.reporter || {
+        firstName: 'N/A',
+        lastName: '',
+        email: 'N/A',
+        phone: 'N/A'
+      }
+    };
+    
+    console.log('Processed item for display:', processedItem);
+    setSelectedItem(processedItem);
     setShowDetailsModal(true);
   };
 
   const handleSendVerification = async (e) => {
-    e?.preventDefault(); // Prevent form submission if called from a form
-    
-    if (!verificationEmail) {
-      toast.error('Please enter an email address');
-      return;
-    }
-    if (!selectedItemId) {
-      toast.error('Please select an item');
-      return;
-    }
-
+    e.preventDefault();
     try {
-      setIsLoading(true);
-      const response = await adminSendVerificationEmail(selectedItemId, verificationEmail);
-      toast.success(response.message || 'Verification code sent successfully!');
-      setVerificationEmail(''); // Clear email input after success
-      setSelectedItemId(''); // Reset item selection
+      await adminSendVerificationEmail(selectedItemId, verificationEmail);
+      toast.success('Verification email sent successfully');
+      setVerificationEmail('');
+      setSelectedItemId('');
     } catch (error) {
-      console.error('Error sending verification:', error);
-      toast.error(error.message || 'Failed to send verification code. Please try again.');
-    } finally {
-      setIsLoading(false);
+      console.error('Error sending verification email:', error);
+      toast.error(error.message || 'Failed to send verification email');
     }
   };
 
-  const filteredItems = (inventoryItems || [])
+  const filteredItems = inventoryItems
     .filter(item => {
-      const matchesSearch = 
-        (item?.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item?.reporter?.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item?.reporter?.lastName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item?.status || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = filterStatus === "all" || item?.status === filterStatus;
-      
+      const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          item.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
-      if (sortBy === "date") {
-        return sortOrder === "desc" 
-          ? new Date(b?.date || 0) - new Date(a?.date || 0)
-          : new Date(a?.date || 0) - new Date(b?.date || 0);
+      if (sortBy === 'date') {
+        return sortOrder === 'desc' 
+          ? new Date(b.createdAt) - new Date(a.createdAt)
+          : new Date(a.createdAt) - new Date(b.createdAt);
       }
-      return sortOrder === "desc"
-        ? (b?.[sortBy] || '').localeCompare(a?.[sortBy] || '')
-        : (a?.[sortBy] || '').localeCompare(b?.[sortBy] || '');
+      return sortOrder === 'desc'
+        ? b[sortBy].localeCompare(a[sortBy])
+        : a[sortBy].localeCompare(b[sortBy]);
     });
 
   return (
-    <>
+    <div className="min-h-screen bg-gray-100">
       <Navbar />
-      <div className="min-h-screen bg-white">
-        <div className="container mx-auto px-6 py-8">
-          {/* Header */}
-          <div className="relative py-6 mb-8">
-            <div className="border-t-4 border-black absolute top-0 left-0 right-0"></div>
-            <div className="flex justify-between items-center">
-              <h1 className="text-6xl font-bold text-black my-4">Admin Dashboard</h1>
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => navigate('/admin/claims')}
-                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                >
-                  Claim Requests
-                </button>
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="bg-[#e2231a] text-white px-4 py-2 rounded hover:bg-[#c41e16]"
-                >
-                  Add New Item
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="bg-black text-white px-4 py-2 rounded hover:bg-gray-800"
-                >
-                  Logout
-                </button>
+      
+      {/* Mobile Menu Button */}
+      <div className="lg:hidden fixed top-4 right-4 z-50">
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 rounded-md bg-red-600 text-white hover:bg-red-700 focus:outline-none"
+        >
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            {isSidebarOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            )}
+          </svg>
+        </button>
+      </div>
+
+      <div className="flex flex-col lg:flex-row">
+        {/* Sidebar */}
+        <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b">
+              <h2 className="text-xl font-bold text-gray-800">Admin Dashboard</h2>
+            </div>
+            
+            <div className="flex-1 p-4">
+              <div className="space-y-4">
+                <div className="bg-white rounded-lg shadow p-4">
+                  <h3 className="text-lg font-semibold mb-2">Statistics</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-gray-50 p-2 rounded">
+                      <p className="text-sm text-gray-600">Total Items</p>
+                      <p className="text-xl font-bold">{stats.total}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <p className="text-sm text-gray-600">Lost Items</p>
+                      <p className="text-xl font-bold">{stats.lost}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <p className="text-sm text-gray-600">Found Items</p>
+                      <p className="text-xl font-bold">{stats.found}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <p className="text-sm text-gray-600">Claimed Items</p>
+                      <p className="text-xl font-bold">{stats.claimed}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow p-4">
+                  <h3 className="text-lg font-semibold mb-2">Actions</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className="w-full bg-red-600 text-white py-2 px-4 rounded hover:bg-red-700 transition"
+                    >
+                      Add New Item
+                    </button>
+                    <button
+                      onClick={() => navigate('/admin/claims')}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
+                    >
+                      Claim Requests
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700 transition"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="border-t-4 border-black absolute bottom-0 left-0 right-0"></div>
           </div>
+        </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-5 gap-4 mb-6">
-            <div className="bg-white p-4 rounded shadow">
-              <h3>Total Items</h3>
-              <p className="text-2xl">{stats.total}</p>
-            </div>
-            <div className="bg-white p-4 rounded shadow">
-              <h3>Lost Items</h3>
-              <p className="text-2xl">{stats.lost}</p>
-            </div>
-            <div className="bg-white p-4 rounded shadow">
-              <h3>Found Items</h3>
-              <p className="text-2xl">{stats.found}</p>
-            </div>
-            <div className="bg-white p-4 rounded shadow">
-              <h3>Claimed Items</h3>
-              <p className="text-2xl">{stats.claimed}</p>
-            </div>
-            <div className="bg-white p-4 rounded shadow">
-              <h3>Returned Items</h3>
-              <p className="text-2xl">{stats.returned}</p>
-            </div>
-          </div>
-
-          {/* Verification Code Section */}
-          <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h2 className="text-xl font-semibold mb-4">Send Verification Code</h2>
-            <form onSubmit={handleSendVerification} className="flex gap-4 items-end">
+        {/* Main Content */}
+        <div className="flex-1 lg:ml-64 p-4">
+          {/* Search and Filter Bar */}
+          <div className="bg-white rounded-lg shadow p-4 mb-4">
+            <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Select Item
-                </label>
-                <select
-                  value={selectedItemId}
-                  onChange={(e) => setSelectedItemId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md"
-                  required
-                >
-                  <option value="">Select an item...</option>
-                  {inventoryItems.map((item) => (
-                    <option key={item._id} value={item._id}>
-                      ID: {item._id} - {item.title} - {item.location} ({item.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address
-                </label>
                 <input
-                  type="email"
-                  value={verificationEmail}
-                  onChange={(e) => setVerificationEmail(e.target.value)}
-                  placeholder="Enter email address"
-                  className="w-full px-3 py-2 border rounded-md"
-                  required
+                  type="text"
+                  placeholder="Search items..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full p-2 border rounded"
                 />
               </div>
-              <button
-                type="submit"
-                disabled={isLoading || !selectedItemId || !verificationEmail}
-                className="bg-[#e2231a] text-white px-6 py-2 rounded-md hover:bg-[#c41e16] transition-colors disabled:opacity-50 h-[42px] flex items-center gap-2"
-              >
-                {isLoading ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                ) : (
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-                  </svg>
-                )}
-                Send Code
-              </button>
-            </form>
-          </div>
-
-          {/* Inventory Management */}
-          <div>
-            {/* Search and Actions Bar */}
-            <div className="bg-black p-4 rounded-lg flex items-center justify-between mb-6">
-              <div className="flex space-x-4">
-                <button
-                  onClick={handleDeleteItems}
-                  disabled={selectedItems.length === 0}
-                  className="bg-[#e2231a] text-white px-4 py-2 rounded disabled:opacity-50"
-                >
-                  Delete Selected
-                </button>
+              <div className="flex flex-col sm:flex-row gap-2">
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-4 py-2 rounded"
+                  className="p-2 border rounded"
                 >
                   <option value="all">All Status</option>
                   <option value="lost">Lost</option>
@@ -418,109 +454,112 @@ const AdminDashboard = () => {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="px-4 py-2 rounded"
+                  className="p-2 border rounded"
                 >
-                  <option value="date">Sort by Date</option>
-                  <option value="item">Sort by Item</option>
-                  <option value="status">Sort by Status</option>
+                  <option value="date">Date</option>
+                  <option value="title">Title</option>
+                  <option value="category">Category</option>
                 </select>
                 <button
-                  onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
-                  className="px-4 py-2 rounded bg-gray-700 text-white"
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="p-2 bg-gray-200 rounded hover:bg-gray-300"
                 >
-                  {sortOrder === "desc" ? "↓" : "↑"}
+                  {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
               </div>
-              <div className="flex items-center">
-                <div className="relative">
-                  <input
-                    id="searchInput"
-                    type="text"
-                    placeholder="Search items..."
-                    className="pl-10 pr-4 py-2 rounded w-64 border border-white bg-transparent text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        setSearchTerm(e.target.value);
-                      }
-                    }}
-                  />
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
             </div>
+          </div>
 
-            {/* Loading State */}
-            {isLoading ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#e2231a]"></div>
-              </div>
-            ) : (
-              /* Inventory Table */
-              <div className="bg-white rounded-lg overflow-hidden shadow">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-[#e2231a]">
+          {/* Items Table */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <input
+                        type="checkbox"
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedItems(filteredItems.map(item => item._id));
+                          } else {
+                            setSelectedItems([]);
+                          }
+                        }}
+                        checked={selectedItems.length === filteredItems.length}
+                        className="rounded"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Item
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Category
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {isLoading ? (
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.length === inventoryItems.length && inventoryItems.length > 0}
-                          onChange={() => {
-                            if (selectedItems.length === inventoryItems.length) {
-                              setSelectedItems([]);
-                            } else {
-                              setSelectedItems(inventoryItems.map(item => item._id));
-                            }
-                          }}
-                          className="h-4 w-4"
-                        />
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Item</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Category</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Location</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Contact</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Details</th>
+                      <td colSpan="6" className="px-4 py-8 text-center">
+                        <div className="flex justify-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredItems.map((item) => (
+                  ) : filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                        No items found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredItems.map((item) => (
                       <tr key={item._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <input
                             type="checkbox"
                             checked={selectedItems.includes(item._id)}
-                            onChange={() => {
-                              if (selectedItems.includes(item._id)) {
-                                setSelectedItems(selectedItems.filter(id => id !== item._id));
-                              } else {
+                            onChange={(e) => {
+                              if (e.target.checked) {
                                 setSelectedItems([...selectedItems, item._id]);
+                              } else {
+                                setSelectedItems(selectedItems.filter(id => id !== item._id));
                               }
                             }}
-                            className="h-4 w-4"
+                            className="rounded"
                           />
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item._id}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center">
+                            <div>
+                              <div className="font-medium text-gray-900">{item.title}</div>
+                              <div className="text-sm text-gray-500">{item.location}</div>
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(item.date).toLocaleDateString()}
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {item.category}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.title}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.category}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-4 py-3">
                           <select
-                            value={item.status || ''}
+                            value={item.status}
                             onChange={(e) => handleStatusChange(item._id, e.target.value)}
-                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            className={`text-sm rounded-full px-3 py-1 ${
+                              item.status === 'lost' ? 'bg-red-100 text-red-800' :
+                              item.status === 'found' ? 'bg-green-100 text-green-800' :
+                              item.status === 'claimed' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}
                           >
                             <option value="lost">Lost</option>
                             <option value="found">Found</option>
@@ -528,255 +567,421 @@ const AdminDashboard = () => {
                             <option value="returned">Returned</option>
                           </select>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.location}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div>
-                            <div className="font-medium">
-                              {item.reporter ? `${item.reporter.firstName} ${item.reporter.lastName}` : 
-                               item.contactInfo ? `${item.contactInfo.firstName} ${item.contactInfo.lastName}` : 'N/A'}
-                            </div>
-                            <div className="text-gray-500">
-                              {item.reporter?.email || item.contactInfo?.email || 'N/A'}
-                            </div>
-                            <div className="text-gray-500">
-                              {item.reporter?.phone || item.contactInfo?.phone || 'N/A'}
-                            </div>
-                          </div>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {new Date(item.createdAt).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.description}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-4 py-3 text-sm font-medium">
                           <button
                             onClick={() => handleViewDetails(item)}
-                            className="text-[#e2231a] hover:text-[#c41e16] underline"
+                            className="text-blue-600 hover:text-blue-900 mr-3"
                           >
-                            View Details
+                            View
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedItemId(item._id);
+                              setShowDetailsModal(true);
+                            }}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            Verify
                           </button>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
+
+          {/* Bulk Actions */}
+          {selectedItems.length > 0 && (
+            <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-lg p-4">
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-600">
+                  {selectedItems.length} item(s) selected
+                </span>
+                <button
+                  onClick={handleDeleteItems}
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                >
+                  Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Add Item Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">Add New Item</h2>
-            <form onSubmit={handleAddItem} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Item Name</label>
-                  <input
-                    type="text"
-                    name="item"
-                    value={newItem.item}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Category</label>
-                  <select
-                    name="category"
-                    value={newItem.category}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  >
-                    <option value="Electronics">Electronics</option>
-                    <option value="Clothing">Clothing</option>
-                    <option value="Documents">Documents</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Status</label>
-                  <select
-                    name="status"
-                    value={newItem.status}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  >
-                    <option value="lost">Lost</option>
-                    <option value="found">Found</option>
-                    <option value="claimed">Claimed</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Location</label>
-                  <input
-                    type="text"
-                    name="location"
-                    value={newItem.location}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">First Name</label>
-                  <input
-                    type="text"
-                    name="firstName"
-                    value={newItem.firstName}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Last Name</label>
-                  <input
-                    type="text"
-                    name="lastName"
-                    value={newItem.lastName}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={newItem.email}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Phone</label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={newItem.phone}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Details</label>
-                <textarea
-                  name="details"
-                  value={newItem.details}
-                  onChange={handleInputChange}
-                  required
-                  rows="3"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e2231a] focus:ring-[#e2231a]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Images</label>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="mt-1 block w-full"
-                />
-                {newItem.images.length > 0 && (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {newItem.images.map((image, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={URL.createObjectURL(image)}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-24 object-cover rounded"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end space-x-4 mt-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">Add New Item</h2>
                 <button
-                  type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="text-gray-500 hover:text-gray-700"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#e2231a] text-white rounded-md hover:bg-[#c41e16]"
-                >
-                  Add Item
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-            </form>
+              
+              <form onSubmit={handleAddItem} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Item Name</label>
+                    <input
+                      type="text"
+                      name="item"
+                      value={newItem.item}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Category</label>
+                    <select
+                      name="category"
+                      value={newItem.category}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      required
+                    >
+                      <option value="Electronics">Electronics</option>
+                      <option value="Clothing">Clothing</option>
+                      <option value="Documents">Documents</option>
+                      <option value="Accessories">Accessories</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Status</label>
+                    <select
+                      name="status"
+                      value={newItem.status}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      required
+                    >
+                      <option value="lost">Lost</option>
+                      <option value="found">Found</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Location</label>
+                    <input
+                      type="text"
+                      name="location"
+                      value={newItem.location}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Date</label>
+                    <input
+                      type="date"
+                      name="date"
+                      value={newItem.date}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Contact Information</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+                    <div>
+                      <input
+                        type="text"
+                        name="firstName"
+                        value={newItem.firstName}
+                        onChange={handleInputChange}
+                        placeholder="First Name"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        name="lastName"
+                        value={newItem.lastName}
+                        onChange={handleInputChange}
+                        placeholder="Last Name"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="email"
+                        name="email"
+                        value={newItem.email}
+                        onChange={handleInputChange}
+                        placeholder="Email"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={newItem.phone}
+                        onChange={handleInputChange}
+                        placeholder="Phone"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Details</label>
+                  <textarea
+                    name="details"
+                    value={newItem.details}
+                    onChange={handleInputChange}
+                    rows="3"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                    required
+                  ></textarea>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Images</label>
+                  <input
+                    type="file"
+                    onChange={handleImageChange}
+                    multiple
+                    accept="image/*"
+                    className="mt-1 block w-full"
+                  />
+                  {newItem.images.length > 0 && (
+                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {newItem.images.map((image, index) => (
+                        <div key={index} className="relative">
+                          <img
+                            src={URL.createObjectURL(image)}
+                            alt={`Preview ${index + 1}`}
+                            className="h-20 w-full object-cover rounded"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isLoading ? 'Adding...' : 'Add Item'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Details Modal */}
+      {/* View Details Modal */}
       {showDetailsModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold">Item Details</h2>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Basic Information</h3>
-                <p><strong>Title:</strong> {selectedItem.title}</p>
-                <p><strong>Category:</strong> {selectedItem.category}</p>
-                <p><strong>Status:</strong> {selectedItem.status}</p>
-                <p><strong>Location:</strong> {selectedItem.location}</p>
-                <p><strong>Date:</strong> {new Date(selectedItem.date).toLocaleDateString()}</p>
-                <p><strong>Description:</strong> {selectedItem.description}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">Item Details</h2>
+                <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setSelectedItem(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Contact Information</h3>
-                <p><strong>Name:</strong> {selectedItem.reporter ? `${selectedItem.reporter.firstName} ${selectedItem.reporter.lastName}` : 
-                   selectedItem.contactInfo ? `${selectedItem.contactInfo.firstName} ${selectedItem.contactInfo.lastName}` : 'N/A'}</p>
-                <p><strong>Email:</strong> {selectedItem.reporter?.email || selectedItem.contactInfo?.email || 'N/A'}</p>
-                <p><strong>Phone:</strong> {selectedItem.reporter?.phone || selectedItem.contactInfo?.phone || 'N/A'}</p>
-              </div>
-            </div>
-            {selectedItem.images && selectedItem.images.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold mb-2">Images</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {selectedItem.images.map((image, index) => (
-                    <img
-                      key={index}
-                      src={image}
-                      alt={`Item image ${index + 1}`}
-                      className="w-full h-48 object-cover rounded"
-                    />
-                  ))}
+              
+              <div className="space-y-4">
+                {/* Item Images - Display at the top for better visibility */}
+                {selectedItem.images && selectedItem.images.length > 0 ? (
+                  <div>
+                    <h3 className="text-lg font-medium">Images</h3>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {selectedItem.images.map((image, index) => {
+                        console.log(`Rendering image ${index} in modal:`, image);
+                        return (
+                          <div key={index} className="relative">
+                            <img
+                              src={image}
+                              alt={`Item image ${index + 1}`}
+                              className="h-48 w-full object-cover rounded-lg shadow-md"
+                              onError={(e) => {
+                                console.error(`Error loading image ${index} in modal:`, image);
+                                e.target.onerror = null;
+                                e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 p-4 rounded-lg text-center">
+                    <p className="text-gray-500">No images available for this item</p>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-lg font-medium">Basic Information</h3>
+                    <div className="mt-2 space-y-2">
+                      <p><span className="font-medium">Title:</span> {selectedItem.title}</p>
+                      <p><span className="font-medium">Category:</span> {selectedItem.category}</p>
+                      <p><span className="font-medium">Status:</span> {selectedItem.status}</p>
+                      <p><span className="font-medium">Location:</span> {selectedItem.location}</p>
+                      <p><span className="font-medium">Date:</span> {new Date(selectedItem.date).toLocaleDateString()}</p>
+                      <p><span className="font-medium">Created:</span> {new Date(selectedItem.createdAt).toLocaleDateString()}</p>
+                      <p><span className="font-medium">Last Updated:</span> {new Date(selectedItem.updatedAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-lg font-medium">Contact Information</h3>
+                    <div className="mt-2 space-y-2">
+                      <p><span className="font-medium">Name:</span> {selectedItem.reporter?.firstName || 'N/A'} {selectedItem.reporter?.lastName || ''}</p>
+                      <p><span className="font-medium">Email:</span> {selectedItem.reporter?.email || 'N/A'}</p>
+                      <p><span className="font-medium">Phone:</span> {selectedItem.reporter?.phone || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-lg font-medium">Description</h3>
+                  <p className="mt-2">{selectedItem.description || 'No description provided'}</p>
+                </div>
+                
+                {selectedItem.claimedBy && (
+                  <div>
+                    <h3 className="text-lg font-medium">Claim Information</h3>
+                    <div className="mt-2 space-y-2">
+                      <p><span className="font-medium">Claimed By:</span> {selectedItem.claimedBy.firstName} {selectedItem.claimedBy.lastName}</p>
+                      <p><span className="font-medium">Email:</span> {selectedItem.claimedBy.email}</p>
+                      <p><span className="font-medium">Phone:</span> {selectedItem.claimedBy.phone}</p>
+                      <p><span className="font-medium">Claim Date:</span> {selectedItem.claimedBy.claimedAt ? new Date(selectedItem.claimedBy.claimedAt).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    onClick={() => {
+                      setShowDetailsModal(false);
+                      setSelectedItem(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
-    </>
+
+      {/* Verification Modal */}
+      {showDetailsModal && !selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">Send Verification Email</h2>
+                <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setSelectedItemId('');
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <form onSubmit={handleSendVerification} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Email Address</label>
+                  <input
+                    type="email"
+                    value={verificationEmail}
+                    onChange={(e) => setVerificationEmail(e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                    placeholder="Enter email address to send verification"
+                    required
+                  />
+                </div>
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDetailsModal(false);
+                      setSelectedItemId('');
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  >
+                    Send Email
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

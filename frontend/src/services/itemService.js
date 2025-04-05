@@ -53,6 +53,13 @@ export const createItem = async (itemData) => {
   try {
     // If itemData is FormData, it's already properly formatted
     if (itemData instanceof FormData) {
+      // Log the form data for debugging
+      const formDataObj = {};
+      for (let [key, value] of itemData.entries()) {
+        formDataObj[key] = value;
+      }
+      console.log('Sending form data:', formDataObj);
+
       const response = await api.post('/items', itemData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -63,45 +70,65 @@ export const createItem = async (itemData) => {
 
     // Validate required fields for regular JSON data
     if (!itemData.title || !itemData.category || !itemData.location || 
-        !itemData.contactInfo?.firstName || !itemData.contactInfo?.lastName || 
-        !itemData.contactInfo?.email || !itemData.contactInfo?.phone) {
+        !itemData.firstName || !itemData.lastName || 
+        !itemData.email || !itemData.phone) {
       throw new Error('Missing required fields');
     }
 
-    const formattedData = {
-      title: itemData.title.trim(),
-      description: (itemData.description || itemData.detailedInfo || 'No description provided').trim(),
-      category: itemData.category,
-      status: itemData.status || 'found', // Default to 'found' for admin-created items
-      location: itemData.location.trim(),
-      date: itemData.date ? new Date(itemData.date) : new Date(),
-      contactInfo: {
-        firstName: itemData.contactInfo.firstName.trim(),
-        lastName: itemData.contactInfo.lastName.trim(),
-        email: itemData.contactInfo.email.trim(),
-        phone: itemData.contactInfo.phone.trim()
-      }
-    };
+    // Create FormData for the request
+    const formData = new FormData();
+    formData.append('title', itemData.title.trim());
+    formData.append('description', (itemData.description || itemData.detailedInfo || 'No description provided').trim());
+    formData.append('category', itemData.category);
+    formData.append('status', itemData.status || 'found');
+    formData.append('location', itemData.location.trim());
+    formData.append('date', itemData.date || new Date().toISOString());
+    formData.append('firstName', itemData.firstName.trim());
+    formData.append('lastName', itemData.lastName.trim());
+    formData.append('email', itemData.email.trim());
+    formData.append('phone', itemData.phone.trim());
+
+    // Add images if they exist
+    if (itemData.images && itemData.images.length > 0) {
+      itemData.images.forEach((image) => {
+        formData.append('images', image);
+      });
+    }
 
     // Validate category enum
     const validCategories = ['Electronics', 'Clothing', 'Documents', 'Accessories', 'Other'];
-    if (!validCategories.includes(formattedData.category)) {
+    if (!validCategories.includes(itemData.category)) {
       throw new Error('Invalid category');
     }
 
     // Validate status enum
-    const validStatuses = ['lost', 'found', 'claimed'];
-    if (!validStatuses.includes(formattedData.status)) {
+    const validStatuses = ['lost', 'found', 'claimed', 'pending', 'rejected'];
+    if (itemData.status && !validStatuses.includes(itemData.status)) {
       throw new Error('Invalid status');
     }
 
-    console.log('Sending formatted data:', formattedData);
+    // Log the form data for debugging
+    const formDataObj = {};
+    for (let [key, value] of formData.entries()) {
+      formDataObj[key] = value;
+    }
+    console.log('Sending form data:', formDataObj);
 
-    const response = await api.post('/admin/items', formattedData);
+    const response = await api.post('/items', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   } catch (error) {
     console.error('Error creating item:', error);
-    throw error.response?.data?.message || error.message || 'Failed to create item';
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    } else if (error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    } else {
+      throw new Error(error.message || 'Failed to create item');
+    }
   }
 };
 

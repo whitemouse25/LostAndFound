@@ -1,10 +1,12 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { isAdminAuthenticated, logoutAdmin } from "../services/authService";
 import fanshaweLogoSrc from "../assets/fanshawe-logo.png"; // Adjust the path according to your assets folder structure
+import { toast } from "react-toastify";
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdmin = isAdminAuthenticated();
   const isAdminRoute = location.pathname.startsWith('/admin');
 
@@ -12,6 +14,17 @@ const Navbar = () => {
   if (location.pathname === '/admin/login') {
     return null;
   }
+
+  const handleLogout = () => {
+    // Call the logoutAdmin function from authService
+    logoutAdmin();
+    
+    // Show success message
+    toast.success('Logged out successfully');
+    
+    // Redirect to login page
+    navigate('/admin/login');
+  };
 
   return (
     <header className="bg-[#FAFAFA] py-4 px-6 shadow-sm h-20">
@@ -38,7 +51,7 @@ const Navbar = () => {
                 </li>
                 <li>
                   <button
-                    onClick={logoutAdmin}
+                    onClick={handleLogout}
                     className="text-gray-700 hover:text-red-600 transition-colors duration-200"
                   >
                     Logout

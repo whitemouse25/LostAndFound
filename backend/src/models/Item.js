@@ -33,7 +33,7 @@ const itemSchema = new mongoose.Schema({
   },
   images: [{
     type: String,
-    required: true
+    required: false
   }],
   reporter: {
     firstName: {

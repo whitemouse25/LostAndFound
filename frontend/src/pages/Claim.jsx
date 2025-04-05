@@ -145,7 +145,7 @@ const Claim = () => {
                             value={formData.firstName}
                             onChange={handleInputChange}
                             className="w-[400px] bg-white rounded border border-white text-black px-3 py-2"
-                            placeholder="First name"
+                            placeholder="Enter your first name"
                             required
                           />
                           <span className="text-xs mt-1 text-[#a9a9a9] block">
@@ -159,7 +159,7 @@ const Claim = () => {
                             value={formData.lastName}
                             onChange={handleInputChange}
                             className="w-[400px] bg-white rounded border border-white text-black px-3 py-2"
-                            placeholder="Last name"
+                            placeholder="Enter your last name"
                             required
                           />
                           <span className="text-xs mt-1 text-[#a9a9a9] block">
@@ -177,7 +177,7 @@ const Claim = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         className="w-[400px] bg-white rounded border border-white text-black px-3 py-2"
-                        placeholder="Enter your email address"
+                        placeholder="example@fanshawe.ca"
                         required
                       />
                       <span className="text-xs mt-1 text-[#a9a9a9] block">
@@ -193,9 +193,12 @@ const Claim = () => {
                         value={formData.phone}
                         onChange={handleInputChange}
                         className="w-[400px] bg-white rounded border border-white text-black px-3 py-2"
-                        placeholder="Enter your phone number"
+                        placeholder="+1 (123) 456-7890"
                         required
                       />
+                      <span className="text-xs mt-1 text-[#a9a9a9] block">
+                        Enter a phone number where we can reach you
+                      </span>
                     </div>
 
                     <div className="px-12">
@@ -210,7 +213,7 @@ const Claim = () => {
                         required
                       />
                       <span className="text-xs mt-1 text-[#a9a9a9] block">
-                        Enter the item ID you received in your email
+                        The item ID was sent to your email when you reported the item
                       </span>
                     </div>
 

@@ -10,6 +10,9 @@ const Jimp = require('jimp'); // You need to install Jimp for image manipulation
 // Create a new item
 exports.createItem = async (req, res) => {
   try {
+    console.log('Received request body:', req.body);
+    console.log('Received files:', req.files);
+
     const {
       title,
       description,
@@ -24,6 +27,42 @@ exports.createItem = async (req, res) => {
       detailedInfo,
     } = req.body;
 
+    // Validate required fields
+    if (!title || !category || !location || !firstName || !lastName || !email || !phone) {
+      const missingFields = [];
+      if (!title) missingFields.push('title');
+      if (!category) missingFields.push('category');
+      if (!location) missingFields.push('location');
+      if (!firstName) missingFields.push('firstName');
+      if (!lastName) missingFields.push('lastName');
+      if (!email) missingFields.push('email');
+      if (!phone) missingFields.push('phone');
+
+      return res.status(400).json({
+        message: 'Missing required fields',
+        missingFields,
+        details: `Please provide all required fields: ${missingFields.join(', ')}`
+      });
+    }
+
+    // Validate category
+    const validCategories = ['Electronics', 'Clothing', 'Documents', 'Accessories', 'Other'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({
+        message: 'Invalid category',
+        details: `Category must be one of: ${validCategories.join(', ')}`
+      });
+    }
+
+    // Validate status
+    const validStatuses = ['lost', 'found', 'claimed', 'pending', 'rejected'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        message: 'Invalid status',
+        details: `Status must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
     // Handle image uploads
     let imageUrls = [];
     if (req.files && req.files.length > 0) {
@@ -37,32 +76,32 @@ exports.createItem = async (req, res) => {
       }
     }
 
+    // Create the item
     const item = new Item({
-      title,
-      description: description || detailedInfo || 'No description provided',
+      title: title.trim(),
+      description: (description || detailedInfo || 'No description provided').trim(),
       category,
-      status,
-      location,
-      date,
+      status: status || 'found',
+      location: location.trim(),
+      date: date ? new Date(date) : new Date(),
       images: imageUrls,
       reporter: {
-        firstName,
-        lastName,
-        email,
-        phone,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
       },
     });
-
-    // Validate that description exists before saving
-    if (!item.description) {
-      throw new Error('Description is required');
-    }
 
     await item.save();
     res.status(201).json(item);
   } catch (error) {
     console.error('Error creating item:', error);
-    res.status(500).json({ message: 'Error creating item', error: error.message });
+    res.status(500).json({ 
+      message: 'Error creating item', 
+      error: error.message,
+      details: error.errors ? Object.values(error.errors).map(err => err.message) : []
+    });
   }
 };
 

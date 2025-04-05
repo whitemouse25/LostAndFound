@@ -209,7 +209,7 @@ exports.getClaimRequests = async (req, res) => {
         console.log('Fetching claim requests...');
         
         // Find all items with claim-related statuses and claimedBy information
-        const claims = await Item.find({
+        const claims = await Item.find({ 
             $or: [
                 { status: 'pending' },
                 { status: 'claimed' },
@@ -237,10 +237,10 @@ exports.getClaimRequests = async (req, res) => {
             success: true,
             claims: claims.map(claim => ({
                 _id: claim._id,
-                title: claim.title,
+                    title: claim.title,
                 description: claim.description,
-                category: claim.category,
-                location: claim.location,
+                    category: claim.category,
+                    location: claim.location,
                 status: claim.status,
                 claimedBy: claim.claimedBy,
                 createdAt: claim.createdAt,
