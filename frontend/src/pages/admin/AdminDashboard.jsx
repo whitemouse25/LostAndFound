@@ -14,8 +14,7 @@ const AdminDashboard = () => {
     total: 0,
     lost: 0,
     found: 0,
-    claimed: 0,
-    returned: 0
+    claimed: 0
   });
   const [inventoryItems, setInventoryItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -113,8 +112,7 @@ const AdminDashboard = () => {
         total: processedItems.length,
         lost: processedItems.filter(item => item.status === 'lost').length,
         found: processedItems.filter(item => item.status === 'found').length,
-        claimed: processedItems.filter(item => item.status === 'claimed').length,
-        returned: processedItems.filter(item => item.status === 'returned').length
+        claimed: processedItems.filter(item => item.status === 'claimed').length
       };
       
       setStats(stats);
@@ -143,7 +141,7 @@ const AdminDashboard = () => {
 
   const handleStatusChange = async (itemId, newStatus) => {
     try {
-      const validStatuses = ['lost', 'found', 'claimed', 'returned'];
+      const validStatuses = ['lost', 'found', 'claimed'];
       if (!validStatuses.includes(newStatus.toLowerCase())) {
         throw new Error('Invalid status value');
       }
@@ -449,7 +447,6 @@ const AdminDashboard = () => {
                   <option value="lost">Lost</option>
                   <option value="found">Found</option>
                   <option value="claimed">Claimed</option>
-                  <option value="returned">Returned</option>
                 </select>
                 <select
                   value={sortBy}
@@ -564,7 +561,6 @@ const AdminDashboard = () => {
                             <option value="lost">Lost</option>
                             <option value="found">Found</option>
                             <option value="claimed">Claimed</option>
-                            <option value="returned">Returned</option>
                           </select>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">
@@ -578,9 +574,18 @@ const AdminDashboard = () => {
                             View
                           </button>
                           <button
-                            onClick={() => {
-                              setSelectedItemId(item._id);
-                              setShowDetailsModal(true);
+                            onClick={async () => {
+                              try {
+                                if (!item.reporter || !item.reporter.email) {
+                                  toast.error('No contact email available for this item');
+                                  return;
+                                }
+                                await adminSendVerificationEmail(item._id, item.reporter.email);
+                                toast.success('Verification email sent successfully');
+                              } catch (error) {
+                                console.error('Error sending verification email:', error);
+                                toast.error(error.message || 'Failed to send verification email');
+                              }
                             }}
                             className="text-green-600 hover:text-green-900"
                           >
@@ -920,63 +925,6 @@ const AdminDashboard = () => {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Verification Modal */}
-      {showDetailsModal && !selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Send Verification Email</h2>
-                <button
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedItemId('');
-                  }}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <form onSubmit={handleSendVerification} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Email Address</label>
-                  <input
-                    type="email"
-                    value={verificationEmail}
-                    onChange={(e) => setVerificationEmail(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
-                    placeholder="Enter email address to send verification"
-                    required
-                  />
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowDetailsModal(false);
-                      setSelectedItemId('');
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  >
-                    Send Email
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         </div>
