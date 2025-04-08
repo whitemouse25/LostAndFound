@@ -1,0 +1,14 @@
+{
+  "name": "lost-and-found",
+  "version": "1.0.0",
+  "description": "Lost and Found Application",
+  "scripts": {
+    "install": "cd frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm run preview",
+    "dev": "cd frontend && npm run dev"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 
